@@ -67,10 +67,32 @@ export function useGeneration() {
       }
       abortControllerRef.current = new AbortController();
 
+      const selectionAtSubmit = state.selectedIndex;
       pendingPromptRef.current = trimmedPrompt;
 
       setState((prev) => ({
         ...prev,
+        messages: (() => {
+          if (prev.messages.length === 0) {
+            return prev.messages;
+          }
+
+          const lastIndex = prev.messages.length - 1;
+          const lastMessage = prev.messages[lastIndex];
+          const selection =
+            selectionAtSubmit === null ? undefined : selectionAtSubmit;
+
+          if (lastMessage.selectedIndex === selection) {
+            return prev.messages;
+          }
+
+          const updated = [...prev.messages];
+          updated[lastIndex] = {
+            ...lastMessage,
+            selectedIndex: selection,
+          };
+          return updated;
+        })(),
         currentVariants: [],
         currentPrompt: trimmedPrompt,
         isLoading: true,
@@ -85,8 +107,8 @@ export function useGeneration() {
             prompt: trimmedPrompt,
             mode: state.mode,
             selectedSvg:
-              state.selectedIndex !== null
-                ? state.currentVariants[state.selectedIndex]
+              selectionAtSubmit !== null
+                ? state.currentVariants[selectionAtSubmit]
                 : undefined,
           }),
           signal: abortControllerRef.current.signal,
@@ -134,7 +156,6 @@ export function useGeneration() {
                         id: crypto.randomUUID(),
                         prompt: pendingPromptRef.current,
                         variants: event.variants,
-                        selectedIndex: prev.selectedIndex ?? undefined,
                         timestamp: new Date(),
                       };
 
