@@ -1,21 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { IconSpec, PresetKey } from "@/app/lib/iconSpec/schema";
+import {
+  IconCompileResult,
+  IconDraft,
+  IconSpecExpanded,
+  IconValidationResult,
+  PresetKey,
+} from "@/app/lib/iconSpec/schema";
 import { sampleIcons } from "@/app/lib/iconSpec/samples";
 import { IconRenderer } from "@/app/lib/iconSpec/render";
-import { getPreset } from "@/app/lib/iconSpec/presets";
+import { iconPresetApply } from "@/app/lib/iconSpec/tools/presetApply";
+import { iconValidate } from "@/app/lib/iconSpec/tools/validate";
+import { iconCompileSvg } from "@/app/lib/iconSpec/tools/compileSvg";
 import { ChatPanel } from "./ChatPanel";
 import { PresetGallery } from "./PresetGallery";
 import { PreviewPanel } from "./PreviewPanel";
 
 export function IconStudio() {
-  const [currentSpec, setCurrentSpec] = useState<IconSpec>(sampleIcons[0]);
+  const initialDraft = sampleIcons[0];
+  const initialApply = iconPresetApply(initialDraft);
+  const initialValidation = iconValidate(initialApply.expanded);
+  const initialCompile = iconCompileSvg(initialApply.expanded);
+
+  const [currentDraft, setCurrentDraft] = useState<IconDraft>(initialDraft);
+  const [currentExpanded, setCurrentExpanded] = useState<IconSpecExpanded>(
+    initialApply.expanded
+  );
+  const [validation, setValidation] = useState<IconValidationResult>(
+    initialValidation
+  );
+  const [compiled, setCompiled] = useState<IconCompileResult>(initialCompile);
   const [selectedPreset, setSelectedPreset] = useState<PresetKey>(
-    currentSpec.preset
+    initialDraft.preset
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const applyPipeline = (draft: IconDraft) => {
+    const applyResult = iconPresetApply(draft);
+    const validationResult = iconValidate(applyResult.expanded);
+    const compileResult = iconCompileSvg(applyResult.expanded);
+
+    setCurrentDraft(draft);
+    setCurrentExpanded(applyResult.expanded);
+    setValidation(validationResult);
+    setCompiled(compileResult);
+  };
 
   const handlePromptSubmit = async (prompt: string) => {
     setIsGenerating(true);
@@ -34,15 +65,20 @@ export function IconStudio() {
         throw new Error(data.error || "Failed to generate icon");
       }
 
-      // Apply current preset to the generated icon
-      const preset = getPreset(selectedPreset);
-      setCurrentSpec({
-        ...data.iconSpec,
-        preset: selectedPreset,
-        strokeWidth: preset.strokeWidth,
-        stroke: preset.stroke,
-        fill: preset.fill,
-      });
+      const draft = data.draft as IconDraft | undefined;
+      const expanded = data.expanded as IconSpecExpanded | undefined;
+      const incomingValidation = data.validation as IconValidationResult | undefined;
+      const incomingCompile = data.compile as IconCompileResult | undefined;
+
+      if (!draft || !expanded || !incomingValidation || !incomingCompile) {
+        throw new Error("Icon generation response was incomplete");
+      }
+
+      setCurrentDraft(draft);
+      setCurrentExpanded(expanded);
+      setValidation(incomingValidation);
+      setCompiled(incomingCompile);
+      setSelectedPreset(draft.preset);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
@@ -54,27 +90,11 @@ export function IconStudio() {
 
   const handlePresetChange = (preset: PresetKey) => {
     setSelectedPreset(preset);
-    if (currentSpec) {
-      const presetConfig = getPreset(preset);
-      setCurrentSpec({
-        ...currentSpec,
-        preset,
-        strokeWidth: presetConfig.strokeWidth,
-        stroke: presetConfig.stroke,
-        fill: presetConfig.fill,
-      });
-    }
+    applyPipeline({ ...currentDraft, preset });
   };
 
-  const handleIconSelect = (icon: IconSpec) => {
-    const preset = getPreset(selectedPreset);
-    setCurrentSpec({
-      ...icon,
-      preset: selectedPreset,
-      strokeWidth: preset.strokeWidth,
-      stroke: preset.stroke,
-      fill: preset.fill,
-    });
+  const handleIconSelect = (icon: IconDraft) => {
+    applyPipeline({ ...icon, preset: selectedPreset });
   };
 
   return (
@@ -117,7 +137,9 @@ export function IconStudio() {
             </h3>
             <div className="grid grid-cols-3 gap-2">
               {sampleIcons.map((icon) => {
-                const isSelected = currentSpec?.name === icon.name;
+                const isSelected = currentDraft?.name === icon.name;
+                const previewDraft = { ...icon, preset: selectedPreset };
+                const previewExpanded = iconPresetApply(previewDraft).expanded;
                 return (
                   <button
                     key={icon.name}
@@ -130,11 +152,7 @@ export function IconStudio() {
                     title={icon.name}
                   >
                     <IconRenderer
-                      spec={{
-                        ...icon,
-                        preset: selectedPreset,
-                        ...getPreset(selectedPreset),
-                      }}
+                      spec={previewExpanded}
                       size={24}
                     />
                     <span className="text-xs truncate w-full text-center">
@@ -151,14 +169,19 @@ export function IconStudio() {
             <PresetGallery
               selectedPreset={selectedPreset}
               onPresetChange={handlePresetChange}
-              currentSpec={currentSpec}
+              currentDraft={currentDraft}
             />
           </div>
         </div>
 
         {/* Right panel - Preview */}
         <div className="flex-1 overflow-hidden">
-          <PreviewPanel spec={currentSpec} />
+          <PreviewPanel
+            draft={currentDraft}
+            expanded={currentExpanded}
+            validation={validation}
+            compiled={compiled}
+          />
         </div>
       </div>
     </div>

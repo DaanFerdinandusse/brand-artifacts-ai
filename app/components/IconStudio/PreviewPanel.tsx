@@ -1,15 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { IconSpec } from "@/app/lib/iconSpec/schema";
+import {
+  IconCompileResult,
+  IconDraft,
+  IconSpecExpanded,
+  IconValidationResult,
+} from "@/app/lib/iconSpec/schema";
 import { IconRenderer } from "@/app/lib/iconSpec/render";
-import { serializeSvg } from "@/app/lib/iconSpec/serializeSvg";
-import { downloadSvg, downloadPng } from "@/app/lib/iconSpec/export";
+import {
+  downloadCompiledPng,
+  downloadCompiledSvg,
+  replaceCurrentColor,
+} from "@/app/lib/iconSpec/export";
 
 type TabKey = "preview" | "spec" | "code" | "export";
 
 interface PreviewPanelProps {
-  spec: IconSpec | null;
+  draft: IconDraft | null;
+  expanded: IconSpecExpanded | null;
+  validation: IconValidationResult | null;
+  compiled: IconCompileResult | null;
 }
 
 const tabs: { key: TabKey; label: string }[] = [
@@ -29,7 +40,12 @@ const previewColors = [
   { name: "Green", value: "#22c55e" },
 ];
 
-export function PreviewPanel({ spec }: PreviewPanelProps) {
+export function PreviewPanel({
+  draft,
+  expanded,
+  validation,
+  compiled,
+}: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("preview");
   const [previewColor, setPreviewColor] = useState("currentColor");
   const [exportColor, setExportColor] = useState("#000000");
@@ -42,18 +58,18 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
   };
 
   const handleDownloadSvg = () => {
-    if (spec) {
-      downloadSvg(spec, exportColor);
+    if (compiled && draft) {
+      downloadCompiledSvg(compiled, draft.name, exportColor);
     }
   };
 
   const handleDownloadPng = async (size: number) => {
-    if (spec) {
-      await downloadPng(spec, size, exportColor);
+    if (compiled && draft) {
+      await downloadCompiledPng(compiled, draft.name, size, exportColor);
     }
   };
 
-  if (!spec) {
+  if (!expanded || !draft) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
         <p>Select or generate an icon to preview</p>
@@ -61,8 +77,13 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
     );
   }
 
-  const svgCode = serializeSvg(spec);
-  const specJson = JSON.stringify(spec, null, 2);
+  const svgCode = compiled?.ok ? compiled.svg : "";
+  const exportSvg = compiled?.ok
+    ? replaceCurrentColor(compiled.svg, exportColor)
+    : "";
+  const draftJson = JSON.stringify(draft, null, 2);
+  const expandedJson = JSON.stringify(expanded, null, 2);
+  const validationJson = validation ? JSON.stringify(validation, null, 2) : "";
 
   return (
     <div className="h-full flex flex-col">
@@ -135,7 +156,13 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
                           : previewColor,
                     }}
                   >
-                    <IconRenderer spec={spec} size={size} color={previewColor} />
+                    <IconRenderer
+                      spec={expanded}
+                      size={size}
+                      color={
+                        previewColor === "currentColor" ? undefined : previewColor
+                      }
+                    />
                   </div>
                   <span className="text-xs text-gray-500">{size}px</span>
                 </div>
@@ -145,11 +172,11 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
             {/* Dark/Light background preview */}
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-white border border-gray-200">
-                <IconRenderer spec={spec} size={64} color="#000000" />
+                <IconRenderer spec={expanded} size={64} color="#000000" />
                 <span className="text-xs text-gray-500">Light background</span>
               </div>
               <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-gray-900 border border-gray-700">
-                <IconRenderer spec={spec} size={64} color="#ffffff" />
+                <IconRenderer spec={expanded} size={64} color="#ffffff" />
                 <span className="text-xs text-gray-400">Dark background</span>
               </div>
             </div>
@@ -159,17 +186,45 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
         {activeTab === "spec" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">IconSpec JSON</h3>
+              <h3 className="text-sm font-medium">Icon Draft JSON</h3>
               <button
-                onClick={() => handleCopyCode(specJson)}
+                onClick={() => handleCopyCode(draftJson)}
                 className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 {copiedCode ? "Copied!" : "Copy"}
               </button>
             </div>
             <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto text-xs font-mono">
-              {specJson}
+              {draftJson}
             </pre>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">Expanded Spec JSON</h3>
+              <button
+                onClick={() => handleCopyCode(expandedJson)}
+                className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                {copiedCode ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto text-xs font-mono">
+              {expandedJson}
+            </pre>
+            {validationJson && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">Validation JSON</h3>
+                  <button
+                    onClick={() => handleCopyCode(validationJson)}
+                    className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    {copiedCode ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto text-xs font-mono">
+                  {validationJson}
+                </pre>
+              </>
+            )}
           </div>
         )}
 
@@ -185,7 +240,7 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
               </button>
             </div>
             <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto text-xs font-mono whitespace-pre-wrap">
-              {svgCode}
+              {svgCode || "SVG not available until compilation succeeds."}
             </pre>
           </div>
         )}
@@ -218,7 +273,8 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
               <h3 className="text-sm font-medium mb-3">SVG</h3>
               <button
                 onClick={handleDownloadSvg}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={!compiled || !compiled.ok}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 Download SVG
               </button>
@@ -228,11 +284,12 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
             <div>
               <h3 className="text-sm font-medium mb-3">PNG</h3>
               <div className="flex flex-wrap gap-2">
-                {spec.exports.png.map((size) => (
+                {expanded.exports.png.map((size) => (
                   <button
                     key={size}
                     onClick={() => handleDownloadPng(size)}
-                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    disabled={!compiled || !compiled.ok}
+                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
                   >
                     {size}px
                   </button>
@@ -244,7 +301,14 @@ export function PreviewPanel({ spec }: PreviewPanelProps) {
             <div>
               <h3 className="text-sm font-medium mb-3">Preview</h3>
               <div className="inline-flex p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-                <IconRenderer spec={spec} size={64} color={exportColor} />
+                {compiled?.ok ? (
+                  <span
+                    className="inline-block"
+                    dangerouslySetInnerHTML={{ __html: exportSvg }}
+                  />
+                ) : (
+                  <IconRenderer spec={expanded} size={64} color={exportColor} />
+                )}
               </div>
             </div>
           </div>

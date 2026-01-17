@@ -1,19 +1,20 @@
 "use client";
 
-import { PresetKey, presetKeys, presets } from "@/app/lib/iconSpec";
-import { IconSpec } from "@/app/lib/iconSpec/schema";
+import { PresetKey, iconPresetKeys, iconPresetRegistry } from "@/app/lib/iconSpec";
+import { IconDraft } from "@/app/lib/iconSpec/schema";
 import { IconRenderer } from "@/app/lib/iconSpec/render";
+import { iconPresetApply } from "@/app/lib/iconSpec/tools/presetApply";
 
 interface PresetGalleryProps {
   selectedPreset: PresetKey;
   onPresetChange: (preset: PresetKey) => void;
-  currentSpec: IconSpec | null;
+  currentDraft: IconDraft | null;
 }
 
 export function PresetGallery({
   selectedPreset,
   onPresetChange,
-  currentSpec,
+  currentDraft,
 }: PresetGalleryProps) {
   return (
     <div className="p-4">
@@ -21,18 +22,14 @@ export function PresetGallery({
         Style Presets
       </h3>
       <div className="grid grid-cols-2 gap-3">
-        {presetKeys.map((key) => {
-          const preset = presets[key];
+        {iconPresetKeys.map((key) => {
+          const preset = iconPresetRegistry[key];
           const isSelected = selectedPreset === key;
 
-          // Create a preview spec if we have a current spec
-          const previewSpec: IconSpec | null = currentSpec
+          // Create a preview spec if we have a current draft
+          const previewExpanded = currentDraft
             ? {
-                ...currentSpec,
-                preset: key,
-                strokeWidth: preset.strokeWidth,
-                stroke: preset.stroke,
-                fill: preset.fill,
+                ...iconPresetApply({ ...currentDraft, preset: key }).expanded,
               }
             : null;
 
@@ -47,8 +44,8 @@ export function PresetGallery({
               }`}
             >
               <div className="w-10 h-10 flex items-center justify-center">
-                {previewSpec ? (
-                  <IconRenderer spec={previewSpec} size={32} />
+                {previewExpanded ? (
+                  <IconRenderer spec={previewExpanded} size={32} />
                 ) : (
                   <div className="w-8 h-8 rounded bg-gray-200 dark:bg-gray-700" />
                 )}

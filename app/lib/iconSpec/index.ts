@@ -1,5 +1,10 @@
 export * from "./schema";
 export * from "./presets";
+export * from "./agentPrompt";
+export * from "./tools/presetList";
+export * from "./tools/presetApply";
+export * from "./tools/validate";
+export * from "./tools/compileSvg";
 export { IconRenderer } from "./render";
 export * from "./serializeSvg";
 export * from "./export";

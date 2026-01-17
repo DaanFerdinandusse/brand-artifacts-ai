@@ -1,5 +1,11 @@
-import { IconSpec } from "./schema";
-import { serializeSvgForExport } from "./serializeSvg";
+import { IconCompileResult } from "./schema";
+
+export function replaceCurrentColor(svg: string, color: string): string {
+  if (color === "currentColor") {
+    return svg;
+  }
+  return svg.replace(/currentColor/g, color);
+}
 
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -12,19 +18,13 @@ export function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function downloadSvg(spec: IconSpec, color: string = "#000000"): void {
-  const svgString = serializeSvgForExport(spec, color);
-  const blob = new Blob([svgString], { type: "image/svg+xml" });
-  downloadBlob(blob, `${spec.name}.svg`);
+export function downloadSvg(svg: string, filename: string): void {
+  const blob = new Blob([svg], { type: "image/svg+xml" });
+  downloadBlob(blob, filename);
 }
 
-export async function svgToPng(
-  spec: IconSpec,
-  size: number,
-  color: string = "#000000"
-): Promise<Blob> {
+export async function svgToPng(svg: string, size: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const svgString = serializeSvgForExport(spec, color);
     const img = new Image();
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -52,28 +52,43 @@ export async function svgToPng(
       reject(new Error("Failed to load SVG image"));
     };
 
-    const blob = new Blob([svgString], { type: "image/svg+xml" });
+    const blob = new Blob([svg], { type: "image/svg+xml" });
     img.src = URL.createObjectURL(blob);
   });
 }
 
 export async function downloadPng(
-  spec: IconSpec,
+  svg: string,
+  size: number,
+  filename: string
+): Promise<void> {
+  const blob = await svgToPng(svg, size);
+  downloadBlob(blob, filename);
+}
+
+export function downloadCompiledSvg(
+  compiled: IconCompileResult,
+  name: string,
+  color: string = "#000000"
+): void {
+  if (!compiled.ok) {
+    return;
+  }
+  const svg = replaceCurrentColor(compiled.svg, color);
+  downloadSvg(svg, `${name}.svg`);
+}
+
+export async function downloadCompiledPng(
+  compiled: IconCompileResult,
+  name: string,
   size: number,
   color: string = "#000000"
 ): Promise<void> {
-  const blob = await svgToPng(spec, size, color);
-  downloadBlob(blob, `${spec.name}-${size}px.png`);
-}
-
-export async function downloadAllPngs(
-  spec: IconSpec,
-  sizes: number[],
-  color: string = "#000000"
-): Promise<void> {
-  for (const size of sizes) {
-    await downloadPng(spec, size, color);
+  if (!compiled.ok) {
+    return;
   }
+  const svg = replaceCurrentColor(compiled.svg, color);
+  await downloadPng(svg, size, `${name}-${size}px.png`);
 }
 
 export interface ExportOptions {
@@ -82,31 +97,36 @@ export interface ExportOptions {
   color: string;
 }
 
-export async function exportIcon(
-  spec: IconSpec,
+export async function exportCompiledIcon(
+  compiled: IconCompileResult,
+  name: string,
   options: ExportOptions
 ): Promise<void> {
+  if (!compiled.ok) {
+    return;
+  }
+
   if (options.svg) {
-    downloadSvg(spec, options.color);
+    downloadCompiledSvg(compiled, name, options.color);
   }
 
   if (options.pngSizes.length > 0) {
-    await downloadAllPngs(spec, options.pngSizes, options.color);
+    for (const size of options.pngSizes) {
+      await downloadCompiledPng(compiled, name, size, options.color);
+    }
   }
 }
 
-export function getSvgDataUrl(spec: IconSpec, color: string = "#000000"): string {
-  const svgString = serializeSvgForExport(spec, color);
-  const encoded = encodeURIComponent(svgString);
+export function getSvgDataUrl(svg: string): string {
+  const encoded = encodeURIComponent(svg);
   return `data:image/svg+xml,${encoded}`;
 }
 
 export async function getPngDataUrl(
-  spec: IconSpec,
-  size: number,
-  color: string = "#000000"
+  svg: string,
+  size: number
 ): Promise<string> {
-  const blob = await svgToPng(spec, size, color);
+  const blob = await svgToPng(svg, size);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {

@@ -1,94 +1,71 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { IconSpecSchema, IconSpec } from "@/app/lib/iconSpec/schema";
+import {
+  IconCompileInputSchema,
+  IconPresetApplyInputSchema,
+  IconValidateInputSchema,
+} from "@/app/lib/iconSpec/schema";
+import { ICONSPEC_AGENT_SYSTEM_PROMPT } from "@/app/lib/iconSpec/agentPrompt";
+import { iconPresetList } from "@/app/lib/iconSpec/tools/presetList";
+import { iconPresetApplyTool } from "@/app/lib/iconSpec/tools/presetApply";
+import { iconValidate } from "@/app/lib/iconSpec/tools/validate";
+import { iconCompileSvgTool } from "@/app/lib/iconSpec/tools/compileSvg";
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are an expert icon designer. Your task is to generate IconSpec JSON that defines SVG icons.
-
-You MUST respond with ONLY valid JSON matching this exact schema - no markdown, no explanation, just the JSON object:
-
-{
-  "docType": "icon",
-  "name": string (lowercase, no spaces, use underscores),
-  "preset": "outline_rounded" | "outline_sharp" | "solid" | "duotone",
-  "size": 24,
-  "viewBox": "0 0 24 24",
-  "strokeWidth": 2 (use 2 for outline presets, 0 for solid),
-  "stroke": "currentColor" (use "currentColor" for outlines, "none" for solid),
-  "fill": "none" (use "none" for outlines, "currentColor" for solid),
-  "paths": [{ "d": string (SVG path data) }],
-  "circles": [{ "cx": number, "cy": number, "r": number }] (optional),
-  "rects": [{ "x": number, "y": number, "width": number, "height": number, "rx": number }] (optional),
-  "lines": [{ "x1": number, "y1": number, "x2": number, "y2": number }] (optional),
-  "exports": { "svg": true, "png": [64, 128, 256] }
-}
-
-Design guidelines:
-- Use a 24x24 viewBox coordinate system
-- Keep icons simple and recognizable
-- Use clean, smooth path data
-- For outline style: use stroke-based paths with strokeWidth 2
-- For solid style: use filled paths with no stroke
-- Ensure paths are centered and well-balanced
-- Use standard icon conventions (e.g., 2px stroke, rounded corners for outline_rounded)
-
-Respond with ONLY the JSON object, nothing else.`;
-
-const MAX_RETRIES = 2;
-
-async function generateIconSpec(
-  prompt: string,
-  retryCount = 0
-): Promise<IconSpec> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: `Create an icon for: ${prompt}`,
+const tools = [
+  {
+    name: "icon.preset.list",
+    description: "List available icon presets and recommended sizes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        docType: { type: "string", const: "iconPresetQuery" },
       },
-    ],
-    system: SYSTEM_PROMPT,
-  });
+    },
+  },
+  {
+    name: "icon.preset.apply",
+    description:
+      "Apply a preset to an IconDraft, normalize geometry, and return an expanded spec.",
+    input_schema: {
+      type: "object",
+      properties: {
+        docType: { type: "string", const: "iconPresetApplyRequest" },
+        draft: { type: "object" },
+        options: { type: "object" },
+      },
+      required: ["draft"],
+    },
+  },
+  {
+    name: "icon.validate",
+    description: "Validate an expanded icon spec and return issues/metrics.",
+    input_schema: {
+      type: "object",
+      properties: {
+        docType: { type: "string", const: "iconValidateRequest" },
+        spec: { type: "object" },
+      },
+      required: ["spec"],
+    },
+  },
+  {
+    name: "icon.compileSvg",
+    description: "Compile an expanded icon spec into deterministic SVG output.",
+    input_schema: {
+      type: "object",
+      properties: {
+        docType: { type: "string", const: "iconCompileSvgRequest" },
+        spec: { type: "object" },
+        options: { type: "object" },
+      },
+      required: ["spec"],
+    },
+  },
+];
 
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type");
-  }
-
-  let jsonText = content.text.trim();
-
-  // Try to extract JSON if wrapped in markdown code blocks
-  const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonText = jsonMatch[1].trim();
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch {
-    if (retryCount < MAX_RETRIES) {
-      console.log(`JSON parse failed, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-      return generateIconSpec(prompt, retryCount + 1);
-    }
-    throw new Error(`Failed to parse JSON response: ${jsonText.slice(0, 200)}`);
-  }
-
-  const result = IconSpecSchema.safeParse(parsed);
-  if (!result.success) {
-    if (retryCount < MAX_RETRIES) {
-      console.log(`Validation failed, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-      console.log("Validation errors:", result.error.issues);
-      return generateIconSpec(prompt, retryCount + 1);
-    }
-    throw new Error(`Invalid IconSpec: ${result.error.message}`);
-  }
-
-  return result.data;
-}
+const MAX_TURNS = 8;
 
 export async function POST(request: NextRequest) {
   try {
@@ -102,9 +79,133 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const iconSpec = await generateIconSpec(prompt);
+    const messages: Array<Record<string, unknown>> = [
+      {
+        role: "user",
+        content: `Create an icon for: ${prompt}`,
+      },
+    ];
 
-    return NextResponse.json({ iconSpec });
+    const toolState: {
+      draft?: unknown;
+      expanded?: unknown;
+      validation?: unknown;
+      compile?: unknown;
+      changes?: unknown;
+    } = {};
+
+    for (let turn = 0; turn < MAX_TURNS; turn += 1) {
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
+        system: ICONSPEC_AGENT_SYSTEM_PROMPT,
+        messages,
+        tools,
+      });
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolUses = response.content.filter(
+        (block: { type: string }) => block.type === "tool_use"
+      ) as Array<{
+        id: string;
+        name: string;
+        input: unknown;
+      }>;
+
+      if (toolUses.length === 0) {
+        break;
+      }
+
+      for (const toolUse of toolUses) {
+        let result: unknown;
+        if (toolUse.name === "icon.preset.list") {
+          result = iconPresetList();
+        } else if (toolUse.name === "icon.preset.apply") {
+          const parsed = IconPresetApplyInputSchema.parse(toolUse.input);
+          const applyResult = iconPresetApplyTool(parsed);
+          result = {
+            docType: "iconPresetApplyResponse",
+            expanded: applyResult.expanded,
+            changes: applyResult.changes,
+          };
+          toolState.draft = parsed.draft;
+          toolState.expanded = applyResult.expanded;
+          toolState.changes = applyResult.changes;
+        } else if (toolUse.name === "icon.validate") {
+          const parsed = IconValidateInputSchema.parse(toolUse.input);
+          const expanded = "spec" in parsed ? parsed.spec : parsed.expanded;
+          const validation = iconValidate(expanded);
+          result = {
+            docType: "iconValidateResponse",
+            ok: validation.valid,
+            issues: validation.issues,
+            metrics: validation.metrics,
+          };
+          toolState.expanded = expanded;
+          toolState.validation = validation;
+        } else if (toolUse.name === "icon.compileSvg") {
+          const parsed = IconCompileInputSchema.parse(toolUse.input);
+          const expanded = "spec" in parsed ? parsed.spec : parsed.expanded;
+          const compile = iconCompileSvgTool({ expanded });
+          result = compile.ok
+            ? {
+                docType: "iconCompileSvgResponse",
+                svg: compile.svg,
+                svgMin: compile.svgMin,
+                metadata: compile.metadata,
+              }
+            : {
+                docType: "iconCompileSvgResponse",
+                svg: "",
+                svgMin: "",
+                issues: compile.issues,
+                metadata: {
+                  size: expanded.size,
+                  viewBox: expanded.viewBox,
+                  pathCount: expanded.geometry.paths.length,
+                  totalPathCommands: 0,
+                  strokeWidth: expanded.style.strokeWidth,
+                  padding: expanded.constraints.padding,
+                },
+              };
+          toolState.expanded = expanded;
+          toolState.compile = compile;
+        } else {
+          throw new Error(`Unknown tool: ${toolUse.name}`);
+        }
+
+        messages.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolUse.id,
+              content: JSON.stringify(result),
+            },
+          ],
+        });
+      }
+
+      if ((toolState.compile as { ok?: boolean })?.ok) {
+        break;
+      }
+    }
+
+    if (!toolState.compile) {
+      return NextResponse.json(
+        { error: "Tool loop did not produce a compiled icon." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      draft: toolState.draft,
+      expanded: toolState.expanded,
+      validation: toolState.validation,
+      compile: toolState.compile,
+      changes: toolState.changes,
+    });
   } catch (error) {
     console.error("Icon generation error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
