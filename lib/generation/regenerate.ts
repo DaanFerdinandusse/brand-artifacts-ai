@@ -1,10 +1,14 @@
-import { generateCompletion } from "@/lib/cerebras/client";
+import {
+  generateToolCallArgs,
+  TOOL_RETURN_CRITIQUE,
+  TOOL_RETURN_SVG_VARIANTS,
+} from "@/lib/cerebras/client";
 import {
   getCritiquePrompt,
   getRegenerateWithCritiquePrompt,
   STRICTER_PROMPTS,
 } from "@/lib/cerebras/prompts";
-import { extractSvgsFromJson } from "@/lib/svg/sanitizer";
+import { sanitizeSvg } from "@/lib/svg/sanitizer";
 
 interface RegenerateCallbacks {
   onCritique?: (critique: string) => void;
@@ -21,10 +25,12 @@ export async function regenerateWithCritique(
 
   let critique: string;
   try {
-    critique = await generateCompletion(
+    const result = await generateToolCallArgs<{ critique: string }>(
       [{ role: "user", content: critiquePrompt }],
+      TOOL_RETURN_CRITIQUE,
       { temperature: 0.5 } // Lower temperature for more focused critique
     );
+    critique = result.critique;
     callbacks?.onCritique?.(critique);
   } catch (error) {
     // If critique fails, use a generic message and continue
@@ -48,15 +54,18 @@ export async function regenerateWithCritique(
         : regeneratePrompt;
 
     try {
-      const response = await generateCompletion(
+      const { svgs: rawSvgs } = await generateToolCallArgs<{ svgs: string[] }>(
         [{ role: "user", content: finalPrompt }],
+        TOOL_RETURN_SVG_VARIANTS,
         { temperature: Math.max(0.4, 0.7 - attempt * 0.1) } // Reduce temperature on retries
       );
 
-      const svgs = extractSvgsFromJson(response);
+      const svgs = rawSvgs
+        .map((svg) => sanitizeSvg(svg))
+        .filter(Boolean) as string[];
 
       if (svgs.length === 0) {
-        throw new Error("No valid SVGs extracted from response");
+        throw new Error("No valid SVGs returned from tool call");
       }
 
       // Notify progress for each SVG

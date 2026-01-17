@@ -1,6 +1,6 @@
-import { generateCompletion } from "@/lib/cerebras/client";
+import { generateToolCallArgs, TOOL_RETURN_SVG_VARIANTS } from "@/lib/cerebras/client";
 import { getSingleModePrompt, getIterationPrompt, STRICTER_PROMPTS } from "@/lib/cerebras/prompts";
-import { extractSvgsFromJson } from "@/lib/svg/sanitizer";
+import { sanitizeSvg } from "@/lib/svg/sanitizer";
 
 export async function generateSingle(
   prompt: string,
@@ -20,14 +20,17 @@ export async function generateSingle(
         : systemPrompt;
 
     try {
-      const response = await generateCompletion([
-        { role: "user", content: finalPrompt },
-      ]);
+      const { svgs: rawSvgs } = await generateToolCallArgs<{ svgs: string[] }>(
+        [{ role: "user", content: finalPrompt }],
+        TOOL_RETURN_SVG_VARIANTS
+      );
 
-      const svgs = extractSvgsFromJson(response);
+      const svgs = rawSvgs
+        .map((svg) => sanitizeSvg(svg))
+        .filter(Boolean) as string[];
 
       if (svgs.length === 0) {
-        throw new Error("No valid SVGs extracted from response");
+        throw new Error("No valid SVGs returned from tool call");
       }
 
       // Notify progress for each SVG

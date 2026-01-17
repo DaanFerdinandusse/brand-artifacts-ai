@@ -65,7 +65,7 @@ export function VariantGrid({
       ref={gridRef}
       layout
       role="group"
-      aria-label={`${slotCount} icon variants. Use arrow keys to navigate, Enter to select, D to download.`}
+      aria-label={`${slotCount} icon variants. Use arrow keys to navigate, Enter to select, C to copy, D to download.`}
       className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 w-full max-w-4xl px-2 sm:px-0"
     >
       <AnimatePresence mode="popLayout">

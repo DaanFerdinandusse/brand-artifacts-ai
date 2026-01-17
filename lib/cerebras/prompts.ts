@@ -1,7 +1,8 @@
 export const SVG_SYSTEM_PROMPT = `You are an expert SVG icon designer. Generate clean, scalable SVG icons.
 
 OUTPUT REQUIREMENTS:
-- Output ONLY valid SVG code, no explanations or markdown
+- Do NOT respond with text
+- Always use the required tool call to return outputs
 - Use viewBox="0 0 24 24" for standard icon sizing
 - SVG must be self-contained (no external references)
 - Optimize for clarity at small sizes
@@ -29,15 +30,7 @@ Generate 4 DISTINCT SVG icon variations for this request. Each should be a diffe
 
 User request: "${userPrompt}"
 
-Output as a JSON object with this exact structure:
-{
-  "svgs": [
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>"
-  ]
-}`;
+Call the tool "return_svg_variants" with an array of 4 SVG strings.`;
 }
 
 export function getIterationPrompt(selectedSvg: string, feedback: string): string {
@@ -53,21 +46,13 @@ ${feedback}
 
 Generate 4 new variations that incorporate the feedback while maintaining the essence of the selected design.
 
-Output as a JSON object with this exact structure:
-{
-  "svgs": [
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>"
-  ]
-}`;
+Call the tool "return_svg_variants" with an array of 4 SVG strings.`;
 }
 
 export const STRICTER_PROMPTS = [
-  `Remember: Output ONLY the JSON object with SVG code, no markdown or explanations.`,
-  `Your response must be valid JSON starting with { and ending with }. No other text.`,
-  `Create a simple, minimal SVG icon. Use only basic shapes (path, circle, rect). Output just the JSON with SVGs.`,
+  `Remember: Do NOT respond with text. Always call the required tool.`,
+  `Only call the tool with valid SVG strings. No other output.`,
+  `Create a simple, minimal SVG icon. Use only basic shapes (path, circle, rect). Call the required tool only.`,
 ];
 
 export const VARIANT_SYSTEM_PROMPT = `You are an expert at creating diverse prompt variations for SVG icon generation. Given a user's icon request, create 4 distinct prompt variations that will lead to different but valid interpretations of the icon.`;
@@ -81,10 +66,7 @@ Generate 4 DISTINCT prompt variations that will produce different but valid inte
 3. A minimal/simplified interpretation - clean and simple
 4. A creative/unique interpretation - an unexpected but valid take
 
-Output as JSON array of 4 strings, each being a refined prompt:
-["prompt1", "prompt2", "prompt3", "prompt4"]
-
-Output ONLY the JSON array, no other text.`;
+Call the tool "return_prompt_variants" with an array of 4 strings.`;
 }
 
 export function getSingleSvgPrompt(refinedPrompt: string): string {
@@ -92,7 +74,7 @@ export function getSingleSvgPrompt(refinedPrompt: string): string {
 
 Create an SVG icon for: "${refinedPrompt}"
 
-Output ONLY the SVG code, nothing else.`;
+Call the tool "return_svg" with the SVG string.`;
 }
 
 export function getIterationSingleSvgPrompt(selectedSvg: string, feedback: string, refinedPrompt: string): string {
@@ -110,7 +92,7 @@ Your interpretation style: ${refinedPrompt}
 
 Generate a new SVG that incorporates the feedback while maintaining the essence of the selected design and matching the interpretation style.
 
-Output ONLY the SVG code, nothing else.`;
+Call the tool "return_svg" with the SVG string.`;
 }
 
 // Regeneration prompts - for when user rejects all variants
@@ -122,7 +104,7 @@ ${rejectedSvgs.map((svg, i) => `Variant ${i + 1}:\n${svg}`).join('\n\n')}
 
 Briefly summarize what was likely wrong with these (be concise, 1-2 sentences). Focus on what common issues might have made them all unacceptable.
 
-Output ONLY the critique, no other text.`;
+Call the tool "return_critique" with the critique string.`;
 }
 
 export function getRegenerateWithCritiquePrompt(originalPrompt: string, critique: string): string {
@@ -133,13 +115,5 @@ Previous attempt critique: ${critique}
 Create 4 NEW SVG variations for: "${originalPrompt}"
 Avoid the issues identified in the critique. Make these significantly different from the previous batch.
 
-Output as a JSON object with this exact structure:
-{
-  "svgs": [
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>",
-    "<svg viewBox=\\"0 0 24 24\\"...>...</svg>"
-  ]
-}`;
+Call the tool "return_svg_variants" with an array of 4 SVG strings.`;
 }

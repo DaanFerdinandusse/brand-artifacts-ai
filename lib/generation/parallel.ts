@@ -1,4 +1,8 @@
-import { generateCompletion } from "@/lib/cerebras/client";
+import {
+  generateToolCallArgs,
+  TOOL_RETURN_PROMPT_VARIANTS,
+  TOOL_RETURN_SVG,
+} from "@/lib/cerebras/client";
 import {
   getVariantGenerationPrompt,
   getSingleSvgPrompt,
@@ -14,28 +18,6 @@ interface ProgressCallback {
 }
 
 /**
- * Parse JSON array from model response
- * Handles cases where model may include markdown or extra text
- */
-function parseVariantPrompts(response: string): string[] {
-  // Try to extract JSON array from response
-  const arrayMatch = response.match(/\[[\s\S]*?\]/);
-  if (!arrayMatch) {
-    throw new Error("No JSON array found in response");
-  }
-
-  try {
-    const parsed = JSON.parse(arrayMatch[0]);
-    if (!Array.isArray(parsed) || parsed.length < 4) {
-      throw new Error("Expected array of 4 prompts");
-    }
-    return parsed.slice(0, 4).map((p) => String(p));
-  } catch {
-    throw new Error("Failed to parse prompt variants JSON");
-  }
-}
-
-/**
  * Generate 4 diverse prompt variants from a user prompt
  */
 async function generatePromptVariants(userPrompt: string): Promise<string[]> {
@@ -43,15 +25,20 @@ async function generatePromptVariants(userPrompt: string): Promise<string[]> {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await generateCompletion(
+      const { prompts } = await generateToolCallArgs<{ prompts: string[] }>(
         [
           { role: "system", content: VARIANT_SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
+        TOOL_RETURN_PROMPT_VARIANTS,
         { temperature: 0.8 }
       );
 
-      return parseVariantPrompts(response);
+      if (!Array.isArray(prompts) || prompts.length < 4) {
+        throw new Error("Expected 4 prompt variants");
+      }
+
+      return prompts.slice(0, 4).map((item) => String(item));
     } catch (error) {
       console.log(`Variant generation attempt ${attempt + 1} failed:`, error);
       if (attempt === 2) {
@@ -88,11 +75,13 @@ async function generateSingleSvg(
       attempt > 0 ? `${basePrompt}\n\n${STRICTER_PROMPTS[attempt - 1]}` : basePrompt;
 
     try {
-      const response = await generateCompletion([{ role: "user", content: finalPrompt }], {
-        temperature: 0.7 - attempt * 0.1, // Reduce temperature on retries
-      });
+      const { svg } = await generateToolCallArgs<{ svg: string }>(
+        [{ role: "user", content: finalPrompt }],
+        TOOL_RETURN_SVG,
+        { temperature: 0.7 - attempt * 0.1 } // Reduce temperature on retries
+      );
 
-      const sanitized = sanitizeSvg(response);
+      const sanitized = sanitizeSvg(svg);
       if (sanitized) {
         return sanitized;
       }
