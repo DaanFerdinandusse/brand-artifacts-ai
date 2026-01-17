@@ -1,30 +1,38 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PromptInput } from "@/components/generation/PromptInput";
 import { VariantGrid } from "@/components/generation/VariantGrid";
 import { VariantCountSelect } from "@/components/generation/VariantCountSelect";
 import { RegenerateButton } from "@/components/generation/RegenerateButton";
 import { ChatContainer } from "@/components/chat/ChatContainer";
+import { SearchHistory } from "@/components/search/SearchHistory";
+import { SearchResult } from "@/components/search/SearchResult";
 import { useGeneration } from "@/hooks/useGeneration";
+import { useComponentSearch } from "@/hooks/useComponentSearch";
 
 export default function Home() {
+  const [mode, setMode] = useState<"svg" | "component">("svg");
+  const generation = useGeneration();
+  const componentSearch = useComponentSearch();
   const {
     messages,
     variants,
     selectedIndex,
-    isLoading,
     isRegenerating,
-    error,
-    hasGenerated,
     variantCount,
     lastCritique,
-    generate,
     regenerate,
     selectVariant,
-    clearError,
     setVariantCount,
-  } = useGeneration();
+  } = generation;
+
+  const isSvgMode = mode === "svg";
+  const isLoading = isSvgMode ? generation.isLoading : componentSearch.isLoading;
+  const error = isSvgMode ? generation.error : componentSearch.error;
+  const clearError = isSvgMode ? generation.clearError : componentSearch.clearError;
+  const hasGenerated = isSvgMode ? generation.hasGenerated : componentSearch.hasSearched;
 
   return (
     <main className="min-h-screen flex flex-col overflow-hidden">
@@ -50,10 +58,43 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="text-xl sm:text-2xl font-semibold text-gray-800 mb-6 sm:mb-8 text-center"
             >
-              SVG Icon Generator
+              {isSvgMode ? "SVG Icon Generator" : "Component Finder"}
             </motion.h1>
           )}
         </AnimatePresence>
+
+        {/* Mode toggle */}
+        <motion.div
+          layout
+          className="w-full max-w-2xl mb-4 flex items-center justify-center"
+        >
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setMode("svg")}
+              aria-pressed={isSvgMode}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                isSvgMode
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              SVG
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("component")}
+              aria-pressed={!isSvgMode}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                !isSvgMode
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Component
+            </button>
+          </div>
+        </motion.div>
 
         {/* Prompt Input - always visible */}
         <motion.div
@@ -66,26 +107,44 @@ export default function Home() {
           }}
         >
           <PromptInput
-            onSubmit={generate}
+            onSubmit={isSvgMode ? generation.generate : componentSearch.search}
             isLoading={isLoading}
             placeholder={
-              selectedIndex !== null
-                ? `Refining variant #${selectedIndex + 1}: Add more feedback...`
-                : "Describe the icon you want to create..."
+              isSvgMode
+                ? selectedIndex !== null
+                  ? `Refining variant #${selectedIndex + 1}: Add more feedback...`
+                  : "Describe the icon you want to create..."
+                : "Describe the component you want to find..."
             }
+            label={
+              isSvgMode
+                ? "Describe the icon you want to create"
+                : "Describe the component you want to find"
+            }
+            submitLabel={isSvgMode ? "Generate icons" : "Find component"}
+            submitLabelLoading={isSvgMode ? "Generating icons" : "Searching components"}
+            submitText={isSvgMode ? "Generate" : "Find"}
+            submitTextLoading={isSvgMode ? "Generating..." : "Searching..."}
+            submitTextMobile={isSvgMode ? "Go" : "Find"}
+            submitTextMobileLoading="..."
           />
 
-          {/* Variant Count */}
-          <div className="mt-3 flex items-center justify-between">
-            <VariantCountSelect
-              value={variantCount}
-              onChange={setVariantCount}
-              disabled={isLoading}
-            />
-            <span className="text-xs text-gray-400">
-              {variantCount} {variantCount === 1 ? "variant" : "variants"}
-            </span>
-          </div>
+          {isSvgMode ? (
+            <div className="mt-3 flex items-center justify-between">
+              <VariantCountSelect
+                value={variantCount}
+                onChange={setVariantCount}
+                disabled={isLoading}
+              />
+              <span className="text-xs text-gray-400">
+                {variantCount} {variantCount === 1 ? "variant" : "variants"}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-3 text-xs text-gray-400">
+              Searches the full repo using local ripgrep.
+            </div>
+          )}
         </motion.div>
 
         {/* Error message with retry button */}
@@ -157,7 +216,7 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Chat History - scrollable area above current variants */}
+        {/* History - scrollable area above current results */}
         <AnimatePresence>
           {hasGenerated && (
             <motion.div
@@ -167,103 +226,116 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="mt-6 w-full flex justify-center"
             >
-              <ChatContainer messages={messages} />
+              {isSvgMode ? (
+                <ChatContainer messages={messages} />
+              ) : (
+                <SearchHistory messages={componentSearch.messages} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Current Variants */}
-        <motion.div
-          layout
-          className="mt-6 w-full flex flex-col items-center"
-          transition={{
-            type: "spring",
-            stiffness: 200,
-            damping: 30,
-          }}
-        >
-          {/* Label for current variants with regenerate button */}
-          <AnimatePresence>
-            {hasGenerated && !isLoading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="w-full max-w-4xl mb-2 flex items-center justify-between"
-              >
-                <span className="text-xs text-gray-400 uppercase tracking-wide">
-                  {messages.length > 1 ? "Current Variants" : "Generated Variants"}
-                </span>
-                <RegenerateButton
-                  onClick={regenerate}
-                  disabled={variants.length === 0}
-                  isLoading={isRegenerating}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Critique display during regeneration */}
-          <AnimatePresence>
-            {isRegenerating && lastCritique && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="w-full max-w-4xl mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg"
-              >
-                <p className="text-sm text-amber-800">
-                  <span className="font-medium">Analyzing rejected icons: </span>
-                  {lastCritique}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <VariantGrid
-            variants={variants}
-            requestedCount={variantCount}
-            isLoading={isLoading}
-            selectedIndex={selectedIndex}
-            onSelect={selectVariant}
-          />
-        </motion.div>
-
-        {/* Selection hint */}
-        <AnimatePresence>
-          {variants.length > 0 && !isLoading && selectedIndex === null && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="mt-4 text-sm text-gray-500"
-            >
-              Click a variant to select it for iteration
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        {/* Selected variant indicator */}
-        <AnimatePresence>
-          {selectedIndex !== null && (
+        {isSvgMode ? (
+          <>
+            {/* Current Variants */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="mt-4 flex items-center gap-2"
+              layout
+              className="mt-6 w-full flex flex-col items-center"
+              transition={{
+                type: "spring",
+                stiffness: 200,
+                damping: 30,
+              }}
             >
-              <span className="text-sm text-blue-600 font-medium">
-                Variant #{selectedIndex + 1} selected
-              </span>
-              <button
-                onClick={() => selectVariant(null)}
-                className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
-              >
-                Clear selection
-              </button>
+              {/* Label for current variants with regenerate button */}
+              <AnimatePresence>
+                {hasGenerated && !isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full max-w-4xl mb-2 flex items-center justify-between"
+                  >
+                    <span className="text-xs text-gray-400 uppercase tracking-wide">
+                      {messages.length > 1 ? "Current Variants" : "Generated Variants"}
+                    </span>
+                    <RegenerateButton
+                      onClick={regenerate}
+                      disabled={variants.length === 0}
+                      isLoading={isRegenerating}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Critique display during regeneration */}
+              <AnimatePresence>
+                {isRegenerating && lastCritique && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="w-full max-w-4xl mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg"
+                  >
+                    <p className="text-sm text-amber-800">
+                      <span className="font-medium">Analyzing rejected icons: </span>
+                      {lastCritique}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <VariantGrid
+                variants={variants}
+                requestedCount={variantCount}
+                isLoading={isLoading}
+                selectedIndex={selectedIndex}
+                onSelect={selectVariant}
+              />
             </motion.div>
-          )}
-        </AnimatePresence>
+
+            {/* Selection hint */}
+            <AnimatePresence>
+              {variants.length > 0 && !isLoading && selectedIndex === null && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-4 text-sm text-gray-500"
+                >
+                  Click a variant to select it for iteration
+                </motion.p>
+              )}
+            </AnimatePresence>
+
+            {/* Selected variant indicator */}
+            <AnimatePresence>
+              {selectedIndex !== null && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="mt-4 flex items-center gap-2"
+                >
+                  <span className="text-sm text-blue-600 font-medium">
+                    Variant #{selectedIndex + 1} selected
+                  </span>
+                  <button
+                    onClick={() => selectVariant(null)}
+                    className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
+                  >
+                    Clear selection
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : (
+          <SearchResult
+            result={componentSearch.currentResult}
+            isLoading={componentSearch.isLoading}
+          />
+        )}
 
         {/* Bottom spacing */}
         <div className="h-8" />
