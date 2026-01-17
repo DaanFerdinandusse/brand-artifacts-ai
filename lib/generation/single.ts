@@ -5,11 +5,12 @@ import { sanitizeSvg } from "@/lib/svg/sanitizer";
 export async function generateSingle(
   prompt: string,
   selectedSvg?: string,
+  variantCount: number = 4,
   onProgress?: (index: number, svg: string) => void
 ): Promise<string[]> {
   const systemPrompt = selectedSvg
-    ? getIterationPrompt(selectedSvg, prompt)
-    : getSingleModePrompt(prompt);
+    ? getIterationPrompt(selectedSvg, prompt, variantCount)
+    : getSingleModePrompt(prompt, variantCount);
 
   let lastError: Error | null = null;
 
@@ -33,17 +34,19 @@ export async function generateSingle(
         throw new Error("No valid SVGs returned from tool call");
       }
 
+      const limitedSvgs = svgs.slice(0, variantCount);
+
       // Notify progress for each SVG
-      svgs.forEach((svg, index) => {
+      limitedSvgs.forEach((svg, index) => {
         onProgress?.(index, svg);
       });
 
-      // Ensure we have exactly 4 variants
-      while (svgs.length < 4) {
-        svgs.push(svgs[svgs.length - 1] || '<svg viewBox="0 0 24 24"></svg>');
+      // Ensure we have exactly the requested number of variants
+      while (limitedSvgs.length < variantCount) {
+        limitedSvgs.push(limitedSvgs[limitedSvgs.length - 1] || '<svg viewBox="0 0 24 24"></svg>');
       }
 
-      return svgs.slice(0, 4);
+      return limitedSvgs;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.log(`Attempt ${attempt + 1} failed:`, lastError.message);

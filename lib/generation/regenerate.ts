@@ -18,6 +18,7 @@ interface RegenerateCallbacks {
 export async function regenerateWithCritique(
   originalPrompt: string,
   rejectedSvgs: string[],
+  variantCount: number = 4,
   callbacks?: RegenerateCallbacks
 ): Promise<string[]> {
   // Step 1: Generate critique of rejected SVGs
@@ -42,7 +43,8 @@ export async function regenerateWithCritique(
   // Step 2: Generate new SVGs with critique context
   const regeneratePrompt = getRegenerateWithCritiquePrompt(
     originalPrompt,
-    critique
+    critique,
+    variantCount
   );
 
   let lastError: Error | null = null;
@@ -68,17 +70,21 @@ export async function regenerateWithCritique(
         throw new Error("No valid SVGs returned from tool call");
       }
 
+      const limitedSvgs = svgs.slice(0, variantCount);
+
       // Notify progress for each SVG
-      svgs.forEach((svg, index) => {
+      limitedSvgs.forEach((svg, index) => {
         callbacks?.onVariantComplete?.(index, svg);
       });
 
-      // Ensure we have exactly 4 variants
-      while (svgs.length < 4) {
-        svgs.push(svgs[svgs.length - 1] || '<svg viewBox="0 0 24 24"></svg>');
+      // Ensure we have exactly the requested number of variants
+      while (limitedSvgs.length < variantCount) {
+        limitedSvgs.push(
+          limitedSvgs[limitedSvgs.length - 1] || '<svg viewBox="0 0 24 24"></svg>'
+        );
       }
 
-      return svgs.slice(0, 4);
+      return limitedSvgs;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.log(`Regenerate attempt ${attempt + 1} failed:`, lastError.message);

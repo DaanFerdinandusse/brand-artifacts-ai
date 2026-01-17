@@ -59,7 +59,7 @@ export const TOOL_RETURN_SVG = makeFunctionTool(
 
 export const TOOL_RETURN_SVG_VARIANTS = makeFunctionTool(
   "return_svg_variants",
-  "Return exactly 4 SVG variants.",
+  "Return SVG variants. The required count is specified in the prompt.",
   {
     type: "object",
     additionalProperties: false,
@@ -67,8 +67,6 @@ export const TOOL_RETURN_SVG_VARIANTS = makeFunctionTool(
     properties: {
       svgs: {
         type: "array",
-        minItems: 4,
-        maxItems: 4,
         items: { type: "string" },
       },
     },
@@ -77,7 +75,7 @@ export const TOOL_RETURN_SVG_VARIANTS = makeFunctionTool(
 
 export const TOOL_RETURN_PROMPT_VARIANTS = makeFunctionTool(
   "return_prompt_variants",
-  "Return exactly 4 refined prompt variants.",
+  "Return refined prompt variants. The required count is specified in the prompt.",
   {
     type: "object",
     additionalProperties: false,
@@ -85,8 +83,6 @@ export const TOOL_RETURN_PROMPT_VARIANTS = makeFunctionTool(
     properties: {
       prompts: {
         type: "array",
-        minItems: 4,
-        maxItems: 4,
         items: { type: "string" },
       },
     },

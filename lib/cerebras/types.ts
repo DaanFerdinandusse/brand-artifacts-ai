@@ -1,6 +1,6 @@
 export interface GenerationRequest {
   prompt: string;
-  mode: "parallel" | "single";
+  variantCount?: number;
   selectedSvg?: string;
   selectedIndex?: number;
 }
@@ -8,11 +8,11 @@ export interface GenerationRequest {
 export interface RegenerateRequest {
   originalPrompt: string;
   rejectedSvgs: string[];
-  mode: "parallel" | "single";
+  variantCount?: number;
 }
 
 export type GenerateEvent =
-  | { type: "started"; mode: "parallel" | "single" }
+  | { type: "started"; variantCount: number }
   | { type: "critique"; critique: string }
   | { type: "variant_complete"; index: number; svg: string }
   | { type: "variant_error"; index: number; error: string; retrying: boolean }

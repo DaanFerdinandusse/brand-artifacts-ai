@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
 import { generateSingle } from "@/lib/generation/single";
-import { generateParallel } from "@/lib/generation/parallel";
 import type { GenerateEvent, GenerationRequest } from "@/lib/cerebras/types";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as GenerationRequest;
-  const { prompt, mode = "single", selectedSvg } = body;
+  const { prompt, selectedSvg, variantCount = 4 } = body;
 
   if (!prompt || typeof prompt !== "string") {
     return new Response(JSON.stringify({ error: "Prompt is required" }), {
@@ -23,26 +22,17 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        send({ type: "started", mode });
+        const safeVariantCount = Math.min(8, Math.max(1, Number(variantCount) || 4));
+        send({ type: "started", variantCount: safeVariantCount });
 
-        let variants: string[];
-
-        if (mode === "parallel") {
-          // Parallel mode: generate 4 prompt variants, then 4 SVGs in parallel
-          variants = await generateParallel(prompt, selectedSvg, {
-            onVariantComplete: (index, svg) => {
-              send({ type: "variant_complete", index, svg });
-            },
-            onVariantError: (index, error, retrying) => {
-              send({ type: "variant_error", index, error, retrying });
-            },
-          });
-        } else {
-          // Single mode: one API call that returns 4 SVGs
-          variants = await generateSingle(prompt, selectedSvg, (index, svg) => {
+        const variants = await generateSingle(
+          prompt,
+          selectedSvg,
+          safeVariantCount,
+          (index, svg) => {
             send({ type: "variant_complete", index, svg });
-          });
-        }
+          }
+        );
 
         send({ type: "complete", variants });
       } catch (error) {

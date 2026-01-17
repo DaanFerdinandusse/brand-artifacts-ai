@@ -7,6 +7,7 @@ import { SkeletonCard } from "./SkeletonCard";
 
 interface VariantGridProps {
   variants: string[];
+  requestedCount: number;
   isLoading: boolean;
   selectedIndex: number | null;
   onSelect: (index: number) => void;
@@ -14,12 +15,13 @@ interface VariantGridProps {
 
 export function VariantGrid({
   variants,
+  requestedCount,
   isLoading,
   selectedIndex,
   onSelect,
 }: VariantGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
-  const slotCount = Math.max(4, variants.length);
+  const slotCount = Math.max(requestedCount, variants.length);
   const slots = Array.from({ length: slotCount }, (_, index) => variants[index] ?? null);
 
   // Navigate focus between cards using arrow keys
@@ -39,13 +41,13 @@ export function VariantGrid({
         nextIndex = fromIndex > 0 ? fromIndex - 1 : fromIndex;
         break;
       case "right":
-        nextIndex = fromIndex < variants.length - 1 ? fromIndex + 1 : fromIndex;
+        nextIndex = fromIndex < slotCount - 1 ? fromIndex + 1 : fromIndex;
         break;
       case "up":
         nextIndex = fromIndex >= cols ? fromIndex - cols : fromIndex;
         break;
       case "down":
-        nextIndex = fromIndex + cols < variants.length ? fromIndex + cols : fromIndex;
+        nextIndex = fromIndex + cols < slotCount ? fromIndex + cols : fromIndex;
         break;
     }
 
@@ -54,7 +56,7 @@ export function VariantGrid({
       const nextCard = cards[nextIndex] as HTMLElement;
       nextCard?.focus();
     }
-  }, [variants.length]);
+  }, [slotCount]);
 
   if (!isLoading && variants.length === 0) {
     return null;

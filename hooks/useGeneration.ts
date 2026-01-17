@@ -12,7 +12,7 @@ interface GenerationState {
   isRegenerating: boolean;
   error: string | null;
   hasGenerated: boolean;
-  mode: "parallel" | "single";
+  variantCount: number;
   lastCritique: string | null;
 }
 
@@ -26,7 +26,7 @@ export function useGeneration() {
     isRegenerating: false,
     error: null,
     hasGenerated: false,
-    mode: "parallel",
+    variantCount: 4,
     lastCritique: null,
   });
 
@@ -38,8 +38,9 @@ export function useGeneration() {
   const lastSubmitTimeRef = useRef<number>(0);
   const MIN_SUBMIT_INTERVAL = 500; // ms between submissions
 
-  const setMode = useCallback((mode: "parallel" | "single") => {
-    setState((prev) => ({ ...prev, mode }));
+  const setVariantCount = useCallback((value: number) => {
+    const clamped = Math.min(8, Math.max(1, Math.round(value)));
+    setState((prev) => ({ ...prev, variantCount: clamped }));
   }, []);
 
   const generate = useCallback(
@@ -105,7 +106,7 @@ export function useGeneration() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: trimmedPrompt,
-            mode: state.mode,
+            variantCount: state.variantCount,
             selectedSvg:
               selectionAtSubmit !== null
                 ? state.currentVariants[selectionAtSubmit]
@@ -196,7 +197,7 @@ export function useGeneration() {
         }));
       }
     },
-    [state.selectedIndex, state.currentVariants, state.mode]
+    [state.selectedIndex, state.currentVariants, state.variantCount]
   );
 
   const selectVariant = useCallback((index: number | null) => {
@@ -240,7 +241,7 @@ export function useGeneration() {
         body: JSON.stringify({
           originalPrompt: state.currentPrompt,
           rejectedSvgs: state.currentVariants,
-          mode: state.mode,
+          variantCount: state.variantCount,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -341,7 +342,7 @@ export function useGeneration() {
         isRegenerating: false,
       }));
     }
-  }, [state.currentVariants, state.currentPrompt, state.mode]);
+  }, [state.currentVariants, state.currentPrompt, state.variantCount]);
 
   const clearError = useCallback(() => {
     setState((prev) => ({ ...prev, error: null }));
@@ -355,6 +356,6 @@ export function useGeneration() {
     regenerate,
     selectVariant,
     clearError,
-    setMode,
+    setVariantCount,
   };
 }

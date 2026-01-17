@@ -4,7 +4,7 @@ import type { GenerateEvent, RegenerateRequest } from "@/lib/cerebras/types";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as RegenerateRequest;
-  const { originalPrompt, rejectedSvgs, mode = "single" } = body;
+  const { originalPrompt, rejectedSvgs, variantCount = 4 } = body;
 
   if (!originalPrompt || typeof originalPrompt !== "string") {
     return new Response(
@@ -35,11 +35,13 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        send({ type: "started", mode });
+        const safeVariantCount = Math.min(8, Math.max(1, Number(variantCount) || 4));
+        send({ type: "started", variantCount: safeVariantCount });
 
         const variants = await regenerateWithCritique(
           originalPrompt,
           rejectedSvgs,
+          safeVariantCount,
           {
             onCritique: (critique) => {
               send({ type: "critique", critique });

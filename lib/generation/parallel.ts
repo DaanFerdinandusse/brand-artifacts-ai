@@ -18,10 +18,13 @@ interface ProgressCallback {
 }
 
 /**
- * Generate 4 diverse prompt variants from a user prompt
+ * Generate diverse prompt variants from a user prompt
  */
-async function generatePromptVariants(userPrompt: string): Promise<string[]> {
-  const prompt = getVariantGenerationPrompt(userPrompt);
+async function generatePromptVariants(
+  userPrompt: string,
+  variantCount: number
+): Promise<string[]> {
+  const prompt = getVariantGenerationPrompt(userPrompt, variantCount);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -34,21 +37,26 @@ async function generatePromptVariants(userPrompt: string): Promise<string[]> {
         { temperature: 0.8 }
       );
 
-      if (!Array.isArray(prompts) || prompts.length < 4) {
-        throw new Error("Expected 4 prompt variants");
+      if (!Array.isArray(prompts) || prompts.length < variantCount) {
+        throw new Error("Expected prompt variants");
       }
 
-      return prompts.slice(0, 4).map((item) => String(item));
+      return prompts.slice(0, variantCount).map((item) => String(item));
     } catch (error) {
       console.log(`Variant generation attempt ${attempt + 1} failed:`, error);
       if (attempt === 2) {
         // Fallback: create simple variants manually
-        return [
+        const fallback = [
           userPrompt,
           `${userPrompt} - stylized and artistic`,
           `${userPrompt} - minimal and simple`,
           `${userPrompt} - creative interpretation`,
+          `${userPrompt} - geometric`,
+          `${userPrompt} - abstract`,
+          `${userPrompt} - outlined`,
+          `${userPrompt} - bold solid`,
         ];
+        return fallback.slice(0, variantCount);
       }
     }
   }
@@ -96,17 +104,18 @@ async function generateSingleSvg(
 }
 
 /**
- * Generate 4 SVGs in parallel using diversified prompts
- * 1. First generates 4 prompt variants from the user prompt
+ * Generate SVGs in parallel using diversified prompts
+ * 1. First generates prompt variants from the user prompt
  * 2. Then generates SVGs for each variant in parallel
  */
 export async function generateParallel(
   prompt: string,
   selectedSvg?: string,
+  variantCount: number = 4,
   progress?: ProgressCallback
 ): Promise<string[]> {
   // Step 1: Generate 4 diverse prompt variants
-  const variantPrompts = await generatePromptVariants(prompt);
+  const variantPrompts = await generatePromptVariants(prompt, variantCount);
 
   // Step 2: Generate SVGs in parallel for each variant
   const svgPromises = variantPrompts.map(async (refinedPrompt, index) => {

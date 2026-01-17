@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { PromptInput } from "@/components/generation/PromptInput";
 import { VariantGrid } from "@/components/generation/VariantGrid";
-import { ModeToggle } from "@/components/generation/ModeToggle";
+import { VariantCountSelect } from "@/components/generation/VariantCountSelect";
 import { RegenerateButton } from "@/components/generation/RegenerateButton";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -17,13 +17,13 @@ export default function Home() {
     isRegenerating,
     error,
     hasGenerated,
-    mode,
+    variantCount,
     lastCritique,
     generate,
     regenerate,
     selectVariant,
     clearError,
-    setMode,
+    setVariantCount,
   } = useGeneration();
 
   return (
@@ -75,13 +75,15 @@ export default function Home() {
             }
           />
 
-          {/* Mode Toggle */}
+          {/* Variant Count */}
           <div className="mt-3 flex items-center justify-between">
-            <ModeToggle mode={mode} onChange={setMode} disabled={isLoading} />
+            <VariantCountSelect
+              value={variantCount}
+              onChange={setVariantCount}
+              disabled={isLoading}
+            />
             <span className="text-xs text-gray-400">
-              {mode === "parallel"
-                ? "More diverse results"
-                : "Faster generation"}
+              {variantCount} {variantCount === 1 ? "variant" : "variants"}
             </span>
           </div>
         </motion.div>
@@ -220,6 +222,7 @@ export default function Home() {
 
           <VariantGrid
             variants={variants}
+            requestedCount={variantCount}
             isLoading={isLoading}
             selectedIndex={selectedIndex}
             onSelect={selectVariant}
