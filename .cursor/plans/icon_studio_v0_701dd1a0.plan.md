@@ -1,39 +1,3 @@
----
-name: Icon Studio v0
-overview: Build a client-first Icon Studio where the model produces a validated IconSpec JSON and the browser renders/export icons instantly via a deterministic SVG renderer, optimized for non-technical users and fast visual feedback.
-todos:
-  - id: ui-shell
-    content: Replace the Hello World page with an Icon Studio split-pane UI (chat + preview tabs + preset gallery).
-    status: pending
-  - id: icon-spec-schema
-    content: Define IconSpec v0.1 types + runtime validation and a small preset registry (stroke caps/joins, default stroke widths, palette).
-    status: pending
-    dependencies:
-      - ui-shell
-  - id: svg-renderer
-    content: Implement deterministic React SVG renderer (IconSpec → <svg>) with safe, restricted element/attribute mapping.
-    status: pending
-    dependencies:
-      - icon-spec-schema
-  - id: exports-svg-png
-    content: "Implement client-side exports: SVG download + SVG→PNG conversion for 64/128/256 sizes."
-    status: pending
-    dependencies:
-      - svg-renderer
-  - id: history-diff
-    content: Add revision history (localStorage) with Restore + Compare (basic JSON diff view).
-    status: pending
-    dependencies:
-      - ui-shell
-      - icon-spec-schema
-  - id: llm-spec-generation
-    content: (Optional Phase 1) Add API route + validate/repair loop so LLM returns IconSpec JSON reliably; keep preview on last valid spec during generation.
-    status: pending
-    dependencies:
-      - icon-spec-schema
-      - history-diff
----
-
 # Icon Studio v0 (client-first, instant preview)
 
 ### Product goal
