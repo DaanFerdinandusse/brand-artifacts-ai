@@ -20,6 +20,7 @@ interface PreviewRequest {
   componentCode?: string | null;
   description?: string;
   props?: Record<string, unknown>;
+  previewMode?: "static" | "inspect";
 }
 
 interface WrapperSpec {
@@ -405,6 +406,8 @@ function buildEntry(options: {
   propsJson: string;
   wrappers: WrapperSpec[];
   bodyClassName?: string | null;
+  previewMode: "static" | "inspect";
+  componentLabel: string;
 }): string {
   const wrapperImports = options.wrappers
     .map(
@@ -462,6 +465,9 @@ bodyClasses.forEach((cls) => document.body.classList.add(cls));
 `
     : "";
 
+  const previewMode = options.previewMode;
+  const componentLabel = options.componentLabel;
+
   return `
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -471,6 +477,8 @@ ${wrapperImports}
 const Component = Module[${JSON.stringify(options.exportName)}] ?? Module.default;
 const props = ${options.propsJson};
 const rootElement = document.getElementById("root");
+const previewMode = ${JSON.stringify(previewMode)};
+const componentLabel = ${JSON.stringify(componentLabel)};
 
 if (!rootElement) {
   throw new Error("Preview root element not found.");
@@ -489,8 +497,177 @@ ${wrapperChecks}
 ${bodyClassScript}
 ${wrapperCompose}
 
+function PreviewBoundary({ children, name, mode }) {
+  const containerRef = React.useRef(null);
+  const modeRef = React.useRef(mode);
+
+  React.useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  React.useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const componentOverlay = document.createElement("div");
+    componentOverlay.className = "preview-outline";
+    const componentLabelNode = document.createElement("div");
+    componentLabelNode.className = "preview-label";
+    componentLabelNode.textContent = name || "Component";
+    componentOverlay.appendChild(componentLabelNode);
+    document.body.appendChild(componentOverlay);
+
+    const hoverOverlay = document.createElement("div");
+    hoverOverlay.className = "preview-outline preview-hover";
+    const hoverLabelNode = document.createElement("div");
+    hoverLabelNode.className = "preview-label";
+    hoverOverlay.appendChild(hoverLabelNode);
+    document.body.appendChild(hoverOverlay);
+
+    let lockedElement = null;
+    let lastHoverElement = null;
+
+    function formatElementLabel(element) {
+      if (!element) {
+        return "Element";
+      }
+      const tag = element.tagName ? element.tagName.toLowerCase() : "element";
+      const id = element.id ? "#" + element.id : "";
+      let className = "";
+      if (typeof element.className === "string" && element.className.trim()) {
+        const parts = element.className.trim().split(/\\s+/).slice(0, 3);
+        className = "." + parts.join(".");
+      }
+      return tag + id + className;
+    }
+
+    function applyRectStyles(target, rect, withLabel) {
+      if (!rect || rect.width === 0 || rect.height === 0) {
+        target.style.display = "none";
+        return;
+      }
+      target.style.display = "block";
+      target.style.left = rect.left + "px";
+      target.style.top = rect.top + "px";
+      target.style.width = rect.width + "px";
+      target.style.height = rect.height + "px";
+      if (withLabel) {
+        withLabel.textContent = String(withLabel.textContent || "");
+      }
+    }
+
+    function updateComponentBox() {
+      const rect = container.getBoundingClientRect();
+      applyRectStyles(componentOverlay, rect, componentLabelNode);
+    }
+
+    function updateHoverBox(element, isLocked) {
+      if (!element) {
+        hoverOverlay.style.display = "none";
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      hoverLabelNode.textContent = isLocked
+        ? "Locked: " + formatElementLabel(element)
+        : "Hover: " + formatElementLabel(element);
+      applyRectStyles(hoverOverlay, rect, hoverLabelNode);
+    }
+
+    function handleMouseMove(event) {
+      if (modeRef.current !== "inspect" || lockedElement) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || !container.contains(target)) {
+        hoverOverlay.style.display = "none";
+        lastHoverElement = null;
+        return;
+      }
+      lastHoverElement = target;
+      updateHoverBox(target, false);
+    }
+
+    function handleClick(event) {
+      if (modeRef.current !== "inspect") {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || !container.contains(target)) {
+        return;
+      }
+      if (lockedElement) {
+        lockedElement = null;
+        updateHoverBox(null, false);
+        return;
+      }
+      lockedElement = target;
+      updateHoverBox(target, true);
+    }
+
+    function handleKey(event) {
+      if (event.key === "Escape" && lockedElement) {
+        lockedElement = null;
+        updateHoverBox(null, false);
+      }
+    }
+
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+          updateComponentBox();
+          if (lockedElement) {
+            updateHoverBox(lockedElement, true);
+          }
+        })
+      : null;
+
+    resizeObserver?.observe(container);
+
+    const updateAll = () => {
+      updateComponentBox();
+      if (lockedElement) {
+        updateHoverBox(lockedElement, true);
+      } else if (lastHoverElement && modeRef.current === "inspect") {
+        updateHoverBox(lastHoverElement, false);
+      }
+    };
+
+    window.addEventListener("scroll", updateAll, true);
+    window.addEventListener("resize", updateAll);
+    window.addEventListener("keydown", handleKey);
+    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("click", handleClick);
+
+    updateComponentBox();
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("scroll", updateAll, true);
+      window.removeEventListener("resize", updateAll);
+      window.removeEventListener("keydown", handleKey);
+      container.removeEventListener("mousemove", handleMouseMove);
+      container.removeEventListener("click", handleClick);
+      componentOverlay.remove();
+      hoverOverlay.remove();
+    };
+  }, []);
+
+  return React.createElement(
+    "div",
+    { ref: containerRef, "data-preview-root": "true" },
+    children
+  );
+}
+
+const previewContent = React.createElement(
+  PreviewBoundary,
+  { name: componentLabel, mode: previewMode },
+  wrappedElement
+);
+
 const root = createRoot(rootElement);
-root.render(wrappedElement);
+root.render(previewContent);
 `;
 }
 
@@ -506,6 +683,31 @@ function buildHtml(payload: { js: string; css?: string; propsJson: string }): st
     <style>
       html, body { margin: 0; padding: 0; font-family: system-ui, sans-serif; }
       #root { min-height: 100vh; padding: 16px; box-sizing: border-box; }
+      .preview-outline {
+        position: fixed;
+        border: 2px solid #3b82f6;
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 2147483647;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+      }
+      .preview-outline.preview-hover {
+        border-color: #f59e0b;
+        border-style: dashed;
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15);
+      }
+      .preview-label {
+        position: absolute;
+        top: -20px;
+        left: 0;
+        font-size: 11px;
+        line-height: 1;
+        padding: 3px 6px;
+        background: rgba(15, 23, 42, 0.9);
+        color: #fff;
+        border-radius: 999px;
+        letter-spacing: 0.02em;
+      }
     </style>
     ${css ? `<style>${css}</style>` : ""}
   </head>
@@ -722,12 +924,11 @@ async function buildPreviewPlan(
   };
 
   const systemPrompt = `You are a preview planner for UI components.
-Given a component candidate, find the best file to render so the preview matches the app.
-Use repo_search to locate usage sites (prefer app/ pages or parent components).
+Given a component candidate, keep the render target as the candidate component itself.
+Your job is to find any required wrappers (providers/layouts/contexts) and props so the component renders correctly.
+Use repo_search to locate usage sites (prefer app/ pages or parent components) to infer wrapper/providers and props.
 Use read_file to inspect usage context and note any provider/layout dependencies.
-If no usage is found, fall back to the candidate component itself.
 Return JSON:
-- renderFilePath (string)
 - renderExport (string, "default" or named export)
 - props (object, optional)
 - wrappers (optional array of wrapper components required for the same render; each item: { filePath, exportName, props })
@@ -828,10 +1029,10 @@ Return JSON:
     return fallback;
   }
 
-  const renderFilePath =
-    typeof parsed.renderFilePath === "string" ? parsed.renderFilePath : fallback.renderFilePath;
-  const renderExport =
+  const renderFilePath = input.foundFilePath || fallback.renderFilePath;
+  const parsedRenderExport =
     typeof parsed.renderExport === "string" ? parsed.renderExport : fallback.renderExport;
+  const renderExport = input.componentName || parsedRenderExport;
   const props =
     parsed.props && typeof parsed.props === "object"
       ? (parsed.props as Record<string, unknown>)
@@ -894,6 +1095,8 @@ export async function POST(req: NextRequest) {
   if (!foundFilePath) {
     return jsonResponse({ error: "foundFilePath is required." }, 400);
   }
+  const previewMode =
+    body.previewMode === "inspect" ? "inspect" : "static";
 
   let plan: PreviewPlan;
   try {
@@ -964,6 +1167,8 @@ export async function POST(req: NextRequest) {
     propsJson,
     wrappers: wrapperImports,
     bodyClassName,
+    previewMode,
+    componentLabel: body.componentName ?? plan.renderExport ?? "Component",
   });
 
   let jsText = "";

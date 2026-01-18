@@ -14,6 +14,7 @@ export function SearchResult({ result, isLoading, description }: SearchResultPro
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRuntimeError, setPreviewRuntimeError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"static" | "inspect">("static");
 
   const foundFilePath = result?.foundFilePath ?? null;
   const componentName = result?.componentName ?? null;
@@ -49,6 +50,7 @@ export function SearchResult({ result, isLoading, description }: SearchResultPro
           componentName: name,
           componentCode: code,
           description: prompt,
+          previewMode,
         }),
       });
 
@@ -79,7 +81,7 @@ export function SearchResult({ result, isLoading, description }: SearchResultPro
     }
 
     void requestPreview(foundFilePath, componentName, componentCode, description);
-  }, [foundFilePath, componentName, componentCode, description, canPreview]);
+  }, [foundFilePath, componentName, componentCode, description, previewMode, canPreview]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -177,21 +179,52 @@ export function SearchResult({ result, isLoading, description }: SearchResultPro
       <div className="mt-6 border border-gray-200 rounded-lg bg-white">
         <div className="px-4 py-2 border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400 flex items-center justify-between">
           <span>Preview sandbox</span>
-          <button
-            type="button"
-            onClick={() =>
-              void requestPreview(foundFilePath, componentName, componentCode, description)
-            }
-            disabled={!canPreview || isPreviewLoading}
-            className="text-xs text-blue-600 hover:text-blue-700 disabled:text-gray-400"
-          >
-            {isPreviewLoading ? "Rendering..." : "Refresh preview"}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-md border border-gray-200 bg-white">
+              <button
+                type="button"
+                onClick={() => setPreviewMode("static")}
+                className={`px-2 py-1 text-[11px] font-medium rounded-l-md ${
+                  previewMode === "static"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-600 hover:text-gray-800"
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewMode("inspect")}
+                className={`px-2 py-1 text-[11px] font-medium rounded-r-md ${
+                  previewMode === "inspect"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-600 hover:text-gray-800"
+                }`}
+              >
+                Inspect
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                void requestPreview(foundFilePath, componentName, componentCode, description)
+              }
+              disabled={!canPreview || isPreviewLoading}
+              className="text-xs text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+            >
+              {isPreviewLoading ? "Rendering..." : "Refresh preview"}
+            </button>
+          </div>
         </div>
         <div className="p-4">
           {!canPreview && (
             <div className="text-sm text-gray-500">
               Preview requires a resolved file. Try a more specific prompt.
+            </div>
+          )}
+          {previewMode === "inspect" && canPreview && !isPreviewLoading && (
+            <div className="mb-3 text-xs text-gray-500">
+              Inspect mode: hover to highlight, click to lock, press Esc to clear.
             </div>
           )}
           {previewError && (
