@@ -60,7 +60,20 @@ export async function repoSearch(args: RepoSearchArgs): Promise<RepoSearchResult
   );
 
   const searchPath = path.resolve(CODEBASE_ROOT, relativePath);
-  const rgArgs = ["-n", "--no-heading", "--color", "never", "--glob", glob, query, searchPath];
+  const rgArgs = [
+    "-n",
+    "--no-heading",
+    "--color",
+    "never",
+    "--glob",
+    glob,
+    "--glob",
+    "!.next/**",
+    "--glob",
+    "!node_modules/**",
+    query,
+    searchPath,
+  ];
 
   try {
     const { stdout } = await execFileAsync("rg", rgArgs, {

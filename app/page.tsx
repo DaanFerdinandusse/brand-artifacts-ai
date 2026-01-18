@@ -334,6 +334,7 @@ export default function Home() {
           <SearchResult
             result={componentSearch.currentResult}
             isLoading={componentSearch.isLoading}
+            description={componentSearch.currentDescription}
           />
         )}
 

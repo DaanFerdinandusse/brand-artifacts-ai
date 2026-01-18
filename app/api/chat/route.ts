@@ -83,6 +83,32 @@ type FunctionCallItem = {
   call_id: string;
 };
 
+function inferComponentName(code: string): string | null {
+  const patterns = [
+    /export\s+default\s+function\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /export\s+default\s+class\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /export\s+default\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /export\s+function\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /export\s+const\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /export\s+class\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /function\s+([A-Za-z][A-Za-z0-9_]*)/m,
+    /const\s+([A-Za-z][A-Za-z0-9_]*)\s*=/m,
+  ];
+
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  if (/export\s+default\s+/m.test(code)) {
+    return "default";
+  }
+
+  return null;
+}
+
 function getFunctionCalls(response: unknown): FunctionCallItem[] {
   if (!response || typeof response !== "object") {
     return [];
@@ -291,7 +317,7 @@ export async function POST(req: NextRequest) {
 
     const foundFilePath =
       typeof parsed.foundFilePath === "string" ? parsed.foundFilePath : null;
-    const componentName =
+    let componentName =
       typeof parsed.componentName === "string" ? parsed.componentName : null;
     const parsedStartLine = parseNullableNumber(parsed.componentStartLine);
     const parsedEndLine = parseNullableNumber(parsed.componentEndLine);
@@ -324,6 +350,10 @@ export async function POST(req: NextRequest) {
       if (!found) {
         componentCode = null;
       }
+    }
+
+    if (!componentName && componentCode) {
+      componentName = inferComponentName(componentCode);
     }
 
     return Response.json(
